@@ -1,0 +1,402 @@
+
+
+/* A simplified learned index implementation:
+ *
+ * Skeleton code written by Jianzhong Qi, April 2023
+ * Edited by: Trong Hieu Nguyen - 1325050
+ *
+ */
+
+// algorithms are fun!
+
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+#define STAGE_NUM_ONE 1 /* stage numbers */
+#define STAGE_NUM_TWO 2
+#define STAGE_NUM_THREE 3
+#define STAGE_NUM_FOUR 4
+#define STAGE_HEADER "Stage %d\n==========\n" /* stage header format string */
+
+#define DATASET_SIZE 100    /* number of input integers */
+#define DATA_OUTPUT_SIZE 10 /* output size for stage 1 */
+
+#define BS_NOT_FOUND (-1) /* used by binary search */
+#define BS_FOUND 0
+
+#define NOT_FOUND "not found!"
+#define STEP_ONE_SUCCESS 1
+#define STEP_ONE_FAIL 0
+typedef int data_t; /* data type */
+
+/****************************************************************/
+
+/* function prototypes */
+void print_stage_header(int stage_num);
+int cmp(data_t *x1, data_t *x2);
+void swap_data(data_t *x1, data_t *x2);
+void partition(data_t dataset[], int n, data_t *pivot, int *first_eq,
+               int *first_gt);
+void quick_sort(data_t dataset[], int n);
+int binary_search(data_t dataset[], int lo, int hi, data_t *key, int *locn);
+
+void stage_one();
+void stage_two();
+void stage_three();
+void stage_four();
+
+/* add your own function prototypes here */
+data_t fnkey(data_t key, data_t dataset[], data_t i, data_t j);
+data_t find_a(data_t dataset[], data_t i, data_t j);
+data_t find_b(data_t dataset[], data_t i, data_t j);
+struct functions_t {
+    data_t a, b, max_element;
+};
+data_t step_one(data_t key, data_t dataset[]);
+data_t bs(struct functions_t arr[], data_t key, data_t lo, data_t hi);
+data_t step_two(struct functions_t arr[], data_t key, data_t lo, data_t hi);
+void step_three(struct functions_t arr[], data_t dataset[], data_t idx,
+                data_t *key, int max_err);
+data_t max(data_t x1, data_t x2);
+data_t min(data_t x1, data_t x2);
+/****************************************************************/
+
+/* main function controls all the action */
+int main(int argc, char *argv[]) {
+    /* to hold all input data */
+    data_t dataset[DATASET_SIZE];
+    int max_err;
+    data_t length = 0;
+    /* to hold the mapping functions */
+    struct functions_t arr[DATASET_SIZE / 2 + 1];
+
+    /* stage 1: read and sort the input */
+    stage_one(dataset);
+
+    /* stage 2: compute the first mapping function */
+    stage_two(dataset);
+
+    /* stage 3: compute more mapping functions */
+    scanf("%d", &max_err);
+    stage_three(dataset, arr, max_err, &length);
+
+    /* stage 4: perform exact-match queries */
+    stage_four(dataset, arr, length, max_err);
+
+    /* all done; take some rest */
+    return 0;
+}
+
+/****************************************************************/
+
+/* add your code below */
+
+/* stage 1: read and sort the input */
+void stage_one(data_t dataset[]) {
+    /* add code for stage 1 */
+    /* print stage header */
+    print_stage_header(STAGE_NUM_ONE);
+
+    // read input into dataset[]
+    int i = 0;
+    while (i < DATASET_SIZE && scanf("%d", &dataset[i]) != EOF) {
+        i++;
+    }
+
+    // sort dataset[]
+    quick_sort(dataset, DATASET_SIZE);
+
+    // print first 10 numbers
+    printf("First 10 numbers: ");
+    for (int j = 0; j < DATA_OUTPUT_SIZE; j++) {
+        printf("%d", dataset[j]);
+        if (j < DATA_OUTPUT_SIZE - 1) {
+            printf(" ");
+        }
+    }
+    printf("\n\n");
+}
+
+/* stage 2: compute the first mapping function */
+void stage_two(data_t dataset[]) {
+    /* add code for stage 2 */
+    /* print stage header */
+    print_stage_header(STAGE_NUM_TWO);
+    data_t max_pred_err = 0, max_pos = 0;
+
+    // iterate through dataset to find element with max prediction error
+    // while keeping track of the current element with highest prediction error
+    for (int i = 0; i < DATASET_SIZE; i++) {
+        data_t key = dataset[i];
+        data_t curr = fnkey(key, dataset, 0, 1);
+        if (abs(curr - i) > max_pred_err) {
+            max_pred_err = abs(curr - i);
+            max_pos = i;
+        }
+    }
+
+    printf("Maximum prediction error: %d\n", max_pred_err);
+    printf("For key: %d\n", dataset[max_pos]);
+    printf("At position: %d\n", max_pos);
+    printf("\n");
+}
+
+// function to calculate fkey
+data_t fnkey(data_t key, data_t dataset[], data_t i, data_t j) {
+    if (dataset[i] == dataset[j]) {
+        return i;
+    } else {
+        data_t a = find_a(dataset, i, j), b = find_b(dataset, i, j);
+        double res = ((double)key + a) / b;
+        return ceil(res);
+    }
+}
+
+/* stage 3: compute more mapping functions */
+
+// this finds the a in fnkey, if 2 elements are equal return idx of first of the two elements
+data_t find_a(data_t dataset[], data_t i, data_t j) {
+    if (i + 1 == DATASET_SIZE) {
+        return DATASET_SIZE - 1;
+    }
+    if (dataset[i] != dataset[j]) {
+        return i * dataset[j] - dataset[i] * j;
+    } else {
+        return i;
+    }
+}
+
+// this finds the b in fnkey
+data_t find_b(data_t dataset[], data_t i, data_t j) {
+    if (i + 1 == DATASET_SIZE) {
+        return 0;
+    }
+    return dataset[j] - dataset[i];
+}
+
+// stage 3: compute more mapping functions until there are no more points to be
+// covered
+void stage_three(data_t dataset[], struct functions_t arr[], int max_err,
+                 data_t *len_arr){
+    /* add code for stage 3 */
+    /* print stage header */
+    print_stage_header(STAGE_NUM_THREE);
+    printf("Target maximum prediction error: %d\n", max_err);
+    data_t i = 0, j = 0, tmp = 0;
+
+    arr[j].a = find_a(dataset, 0, 1);
+    arr[j].b = find_b(dataset, 0, 1);
+
+    while (i < DATASET_SIZE){
+
+        if (abs(fnkey(dataset[i], dataset, tmp, tmp + 1) - i) > max_err){
+            arr[j].max_element = dataset[i - 1];
+            tmp = i;
+            printf("Function %2d: a = %4d, b = %3d, max element = %3d\n", j, arr[j].a,
+                   arr[j].b, arr[j].max_element);
+            j++;
+            arr[j].a = find_a(dataset, tmp, tmp + 1);
+            arr[j].b = find_b(dataset, tmp, tmp + 1);
+            *len_arr += 1;
+        }
+        
+        if (i == DATASET_SIZE - 1){
+            arr[j].max_element = dataset[i];
+            printf("Function %2d: a = %4d, b = %3d, max element = %3d\n", j, arr[j].a,
+                   arr[j].b, arr[j].max_element);
+            *len_arr += 1;
+        }
+        i++;
+    }
+    printf("\n");
+}
+
+/* stage 4: perform exact-match queries */
+// step 1: check if key is within range [dataset[0], dataset[DATASET_SIZE - 1]]
+data_t step_one(data_t key, data_t dataset[]) {
+    printf("Searching for %d:\n", key);
+    printf("Step 1: ");
+    // compare with first and last elements in dataset
+    if (key < dataset[0] || key > dataset[DATASET_SIZE - 1]) {
+        printf("not found!\n");
+        return STEP_ONE_FAIL;
+    } else {
+        printf("search key in data domain.\n");
+        return STEP_ONE_SUCCESS;
+    }
+}
+
+// stage 4 step 2: locate mapping function for key
+data_t step_two(struct functions_t arr[], data_t key, data_t lo, data_t hi) {
+    printf("Step 2: ");
+    data_t idx = bs(arr, key, lo, hi);
+    printf("\n");
+    return idx;
+}
+
+// binary search function for stage 4 step 2
+data_t bs(struct functions_t arr[], data_t key, data_t lo, data_t hi) {
+
+    while (lo < hi) {
+        data_t mid = (lo + hi) / 2;
+        printf("%d", arr[mid].max_element);
+
+        if (arr[mid].max_element < key) {
+            lo = mid + 1;
+        } else if (arr[mid].max_element > key) {
+            hi = mid;
+        } else {
+            return mid;
+        }
+
+        if (lo < hi) {    // this is here because I can't think of another way of
+            printf(" ");  // getting rid of the trailing whitespace
+        }
+    }
+    return lo;
+}
+
+// stage 4 step 3: locate key from dataset[max(0, fkey - max_err): min(n - 1, fkey + max_err)]
+void step_three(struct functions_t arr[], data_t dataset[], data_t idx,
+                data_t *key, int max_err) {
+    printf("Step 3: ");
+    data_t a = arr[idx].a, b = arr[idx].b, f_key, key_int = *key;
+
+    if (!b) {
+        f_key = a;
+    } else {
+        f_key = ceil((key_int + a) / (double)b);
+    }
+
+    data_t x = max(f_key - max_err, 0);
+    data_t y = min(f_key + max_err, DATASET_SIZE - 1) + 1;
+    binary_search(dataset, x, y, &key_int, &key_int);
+    printf("\n");
+}
+
+
+// max function for stage 4 step 3
+data_t max(data_t x1, data_t x2) {
+    if (x1 > x2) {
+        return x1;
+    } else {
+        return x2;
+    }
+}
+
+// min function for stage 4 step 3
+data_t min(data_t x1, data_t x2) {
+    if (x1 > x2) {
+        return x2;
+    } else {
+        return x1;
+    }
+}
+
+/* stage 4: perform exact-match queries */
+void stage_four(data_t dataset[], struct functions_t arr[], data_t high,
+                int max_err) {
+    /* add code for stage 4 */
+    /* print stage header */
+    print_stage_header(STAGE_NUM_FOUR);
+    data_t next;
+
+    while (scanf("%d", &next) != EOF) {
+        data_t step1_check = step_one(next, dataset);
+        if (step1_check) {
+            data_t idx = step_two(arr, next, 0, high);
+            step_three(arr, dataset, idx, &next, max_err);
+        }
+    }
+
+    printf("\n");
+}
+
+/****************************************************************/
+/* functions provided, adapt them as appropriate */
+
+/* print stage header given stage number */
+void print_stage_header(int stage_num) { printf(STAGE_HEADER, stage_num); }
+
+/* data swap function used by quick sort, adpated from
+   https://people.eng.unimelb.edu.au/ammoffat/ppsaa/c/sortscaffold.c
+*/
+void swap_data(data_t *x1, data_t *x2) {
+    data_t t;
+    t = *x1;
+    *x1 = *x2;
+    *x2 = t;
+}
+
+/* partition function used by quick sort, from
+   https://people.eng.unimelb.edu.au/ammoffat/ppsaa/c/quicksort.c
+*/
+void partition(data_t dataset[], int n, data_t *pivot, int *first_eq,
+               int *first_gt) {
+    int next = 0, fe = 0, fg = n, outcome;
+
+    while (next < fg) {
+        if ((outcome = cmp(dataset + next, pivot)) < 0) {
+            swap_data(dataset + fe, dataset + next);
+            fe += 1;
+            next += 1;
+        } else if (outcome > 0) {
+            fg -= 1;
+            swap_data(dataset + next, dataset + fg);
+        } else {
+            next += 1;
+        }
+    }
+
+    *first_eq = fe;
+    *first_gt = fg;
+    return;
+}
+
+/* quick sort function, adapted from
+   https://people.eng.unimelb.edu.au/ammoffat/ppsaa/c/quicksort.c
+*/
+void quick_sort(data_t dataset[], int n) {
+    data_t pivot;
+    int first_eq, first_gt;
+
+    if (n <= 1) {
+        return;
+    }
+    /* array section is non-trivial */
+    pivot = dataset[n / 2];  // take the middle element as the pivot
+    partition(dataset, n, &pivot, &first_eq, &first_gt);
+    quick_sort(dataset, first_eq);
+    quick_sort(dataset + first_gt, n - first_gt);
+}
+
+/* comparison function used by binary search and quick sort, from
+   https://people.eng.unimelb.edu.au/ammoffat/ppsaa/c/binarysearch.c
+*/
+int cmp(data_t *x1, data_t *x2) { return (*x1 - *x2); }
+
+/* binary search between dataset[lo] and dataset[hi-1], adapted from
+   https://people.eng.unimelb.edu.au/ammoffat/ppsaa/c/binarysearch.c
+*/
+int binary_search(data_t dataset[], int lo, int hi, data_t *key, int *locn) {
+    int mid, outcome;
+    /* if key is in dataset, it is between dataset[lo] and dataset[hi-1] */
+    if (lo >= hi) {
+        printf("%s", NOT_FOUND);
+        return BS_NOT_FOUND;
+    }
+
+    mid = (lo + hi) / 2;
+    printf("%d ", dataset[mid]);
+    
+    if ((outcome = cmp(key, dataset + mid)) < 0) {
+        return binary_search(dataset, lo, mid, key, locn);
+    } else if (outcome > 0) {
+        return binary_search(dataset, mid + 1, hi, key, locn);
+    } else {
+        *locn = mid;
+        printf("@ dataset[%d]!", mid);
+        return BS_FOUND;
+    }
+}
